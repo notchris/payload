@@ -9,7 +9,6 @@ import { Where } from '../../types';
 import sanitizeInternalFields from '../../utilities/sanitizeInternalFields';
 import { afterChange } from '../../fields/hooks/afterChange';
 import { afterRead } from '../../fields/hooks/afterRead';
-import { saveCollectionVersion } from '../../versions/saveCollectionVersion';
 import { getLatestCollectionVersion } from '../../versions/getLatestCollectionVersion';
 
 export type Arguments = {
@@ -139,6 +138,7 @@ async function restoreVersion<T extends TypeWithID = any>(args: Arguments): Prom
     parent: parentDocID,
     version: prevVersion,
     autosave: false,
+    createdAt: prevVersion.createdAt,
   });
 
   // /////////////////////////////////////

@@ -9,6 +9,8 @@ import { Where } from '../../types';
 import sanitizeInternalFields from '../../utilities/sanitizeInternalFields';
 import { afterChange } from '../../fields/hooks/afterChange';
 import { afterRead } from '../../fields/hooks/afterRead';
+import { saveCollectionVersion } from '../../versions/saveCollectionVersion';
+import { getLatestCollectionVersion } from '../../versions/getLatestCollectionVersion';
 
 export type Arguments = {
   collection: Collection
@@ -23,6 +25,7 @@ export type Arguments = {
 
 async function restoreVersion<T extends TypeWithID = any>(args: Arguments): Promise<T> {
   const {
+    collection,
     collection: {
       Model,
       config: collectionConfig,
@@ -99,10 +102,11 @@ async function restoreVersion<T extends TypeWithID = any>(args: Arguments): Prom
   // fetch previousDoc
   // /////////////////////////////////////
 
-  const previousDoc = await payload.findByID({
-    collection: collectionConfig.slug,
+  const prevDocWithLocales = await getLatestCollectionVersion({
+    payload,
+    collection,
     id: parentDocID,
-    depth,
+    query,
   });
 
   // /////////////////////////////////////
@@ -122,6 +126,20 @@ async function restoreVersion<T extends TypeWithID = any>(args: Arguments): Prom
   result = JSON.stringify(result);
   result = JSON.parse(result);
   result = sanitizeInternalFields(result);
+
+  // /////////////////////////////////////
+  // Save `previousDoc` as a version after restoring
+  // /////////////////////////////////////
+
+  const prevVersion = { ...prevDocWithLocales };
+
+  delete prevVersion.id;
+
+  await VersionModel.create({
+    parent: parentDocID,
+    version: prevVersion,
+    autosave: false,
+  });
 
   // /////////////////////////////////////
   // afterRead - Fields
@@ -156,7 +174,7 @@ async function restoreVersion<T extends TypeWithID = any>(args: Arguments): Prom
   result = await afterChange({
     data: result,
     doc: result,
-    previousDoc,
+    previousDoc: prevDocWithLocales,
     entityConfig: collectionConfig,
     operation: 'update',
     req,
@@ -172,7 +190,7 @@ async function restoreVersion<T extends TypeWithID = any>(args: Arguments): Prom
     result = await hook({
       doc: result,
       req,
-      previousDoc,
+      previousDoc: prevDocWithLocales,
       operation: 'update',
     }) || result;
   }, Promise.resolve());
